@@ -1,24 +1,29 @@
 import streamlit as st
 import pandas as pd
-import joblib, json
-st.set_page_config(page_title="NATA Supermarket - Customer Spend Predictor", layout="centered")
-st.title("NATA Supermarket — Customer Spend Predictor")
-MODEL_PATH = "model.pkl"
-FEATURES_PATH = "feature_columns.json"
+import joblib
+import json
+import os
 
-@st.cache_resource
-def load_model():
-    return joblib.load(MODEL_PATH)
+st.set_page_config(page_title='NATA Supermarket - Customer Spend Predictor', layout='centered')
+st.title('NATA Supermarket - Customer Spend Predictor')
 
-@st.cache_data
-def load_features():
-    with open(FEATURES_PATH, "r") as f:
-        return json.load(f)
+MODEL_FILE = 'rf_model.pkl'
+FEATURE_FILE = 'feature_columns.json'
 
-model = load_model()
-feature_info = load_features()
+# Load model
+model = joblib.load(MODEL_FILE) if os.path.exists(MODEL_FILE) else None
+if model:
+    st.success('✅ Model loaded successfully')
+else:
+    st.error('❌ Model file not found')
 
-st.sidebar.header("Input customer info")
+# Load feature list
+feature_cols = json.load(open(FEATURE_FILE)) if os.path.exists(FEATURE_FILE) else None
+if not feature_cols:
+    st.error('❌ Feature list not found')
+
+# Input section
+st.header('Input customer info')
 input_data = {}
 
 for col in feature_info.get("numeric", []):
@@ -27,6 +32,7 @@ for col in feature_info.get("numeric", []):
 for col, options in feature_info.get("categorical", {}).items():
     choice = st.sidebar.selectbox(col, options)
     input_data[col] = choice
+
 
 if st.sidebar.button("Predict spending"):
     df_input = pd.DataFrame([input_data])
@@ -42,4 +48,3 @@ if st.sidebar.button("Predict spending"):
 
 st.markdown("---")
 st.markdown("**Instructions:** Use the sidebar to set customer values, then click Predict. The model file (model.pkl) and feature metadata (feature_columns.json) must be in the same folder as this app.")
-
