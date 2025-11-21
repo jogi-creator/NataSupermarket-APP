@@ -1,76 +1,45 @@
 import streamlit as st
 import pandas as pd
-import joblib
-import json
-import os
+import joblib, json
+st.set_page_config(page_title="NATA Supermarket - Customer Spend Predictor", layout="centered")
+st.title("NATA Supermarket — Customer Spend Predictor")
+MODEL_PATH = "model.pkl"
+FEATURES_PATH = "feature_columns.json"
 
-st.set_page_config(page_title='Employee Attrition Prediction', layout='centered')
-st.title('🧠 Employee Attrition Prediction')
+@st.cache_resource
+def load_model():
+    return joblib.load(MODEL_PATH)
 
-MODEL_FILE = 'rf_model.pkl'
-FEATURE_FILE = 'feature_columns.json'
+@st.cache_data
+def load_features():
+    with open(FEATURES_PATH, "r") as f:
+        return json.load(f)
 
-# Load model
-model = joblib.load(MODEL_FILE) if os.path.exists(MODEL_FILE) else None
-if model:
-    st.success('✅ Model loaded successfully')
-else:
-    st.error('❌ Model file not found')
+model = load_model()
+feature_info = load_features()
 
-# Load feature list
-feature_cols = json.load(open(FEATURE_FILE)) if os.path.exists(FEATURE_FILE) else None
-if not feature_cols:
-    st.error('❌ Feature list not found')
+st.sidebar.header("Input customer info")
+input_data = {}
 
-# Input section
-st.header('Enter Employee Details')
-col1, col2 = st.columns(2)
-with col1:
-    MonthlyIncome = st.number_input('Monthly Income', value=5000)
-    Age = st.slider('Age', 18, 70, 30)
-    TotalWorkingYears = st.number_input('Total Working Years', value=8)
-    OverTime_Yes = st.selectbox('OverTime', ['No', 'Yes'])
-    DailyRate = st.number_input('Daily Rate', value=800)
+for col in feature_info.get("numeric", []):
+    input_data[col] = st.sidebar.number_input(col, value=0.0, format="%.2f")
 
-with col2:
-    YearsAtCompany = st.number_input('Years At Company', value=5)
-    HourlyRate = st.number_input('Hourly Rate', value=50)
-    DistanceFromHome = st.number_input('Distance From Home', value=5)
-    MonthlyRate = st.number_input('Monthly Rate', value=20000)
-    NumCompaniesWorked = st.number_input('Num Companies Worked', value=2)
+for col, options in feature_info.get("categorical", {}).items():
+    choice = st.sidebar.selectbox(col, options)
+    input_data[col] = choice
 
-OverTime_Yes = 1 if OverTime_Yes == 'Yes' else 0
+if st.sidebar.button("Predict spending"):
+    df_input = pd.DataFrame([input_data])
+    for n in feature_info.get("numeric", []):
+        try:
+            df_input[n] = pd.to_numeric(df_input[n])
+        except Exception:
+            pass
+    pred = model.predict(df_input)[0]
+    st.subheader("Predicted total spend (last 2 years)")
+    st.write("₹{:, .2f}".format(pred))
+    st.caption("Model: Gradient Boosting regressor trained on historical data")
 
-input_df = pd.DataFrame([{
-    'MonthlyIncome': MonthlyIncome,
-    'Age': Age,
-    'TotalWorkingYears': TotalWorkingYears,
-    'OverTime_Yes': OverTime_Yes,
-    'DailyRate': DailyRate,
-    'YearsAtCompany': YearsAtCompany,
-    'HourlyRate': HourlyRate,
-    'DistanceFromHome': DistanceFromHome,
-    'MonthlyRate': MonthlyRate,
-    'NumCompaniesWorked': NumCompaniesWorked
-}])
+st.markdown("---")
+st.markdown("**Instructions:** Use the sidebar to set customer values, then click Predict. The model file (model.pkl) and feature metadata (feature_columns.json) must be in the same folder as this app.")
 
-st.subheader('Input Preview')
-st.dataframe(input_df)
-
-if st.button('🔍 Predict Attrition'):
-    if model is None or feature_cols is None:
-        st.error('Model or feature list not loaded.')
-    else:
-        X_pred = input_df.copy()
-        for c in feature_cols:
-            if c not in X_pred.columns:
-                X_pred[c] = 0
-        X_pred = X_pred[feature_cols]
-
-        pred = model.predict(X_pred)[0]
-        prob = model.predict_proba(X_pred)[0][1] if hasattr(model, "predict_proba") else None
-
-        if pred == 1:
-            st.error(f'⚠️ High risk of attrition (Prob: {prob:.2f})')
-        else:
-            st.success(f'✅ Low risk of attrition (Prob: {prob:.2f})')
